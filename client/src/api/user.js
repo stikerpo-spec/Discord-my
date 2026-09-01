@@ -1,13 +1,46 @@
-import axios from "axios";
+const USERS_KEY = "discord-my-users";
+const CURRENT_USER_KEY = "discord-my-current-user";
 
-const api = axios.create({
-  baseURL: "/api/users",
-});
-
-export const login = async (userInfo) => {
-  return await api.post("/login", userInfo);
+const readUsers = () => {
+  try {
+    return JSON.parse(localStorage.getItem(USERS_KEY) || "[]");
+  } catch {
+    return [];
+  }
 };
 
-export const signup = async (userInfo) => {
-  return await api.post("/", userInfo);
+const writeUsers = (users) => localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+const makeUser = (username) => ({
+  id: username.toLowerCase(),
+  username,
+  avatarColor: "#5865f2",
+});
+
+export const login = async ({ username, password }) => {
+  const users = readUsers();
+  const user = users.find((item) => item.username === username);
+
+  if (!user) {
+    throw { response: { data: "User not found. Register first." } };
+  }
+  if (user.password !== password) {
+    throw { response: { data: "Incorrect password." } };
+  }
+
+  const safeUser = { id: user.id, username: user.username, avatarColor: user.avatarColor };
+  sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(safeUser));
+  return { data: safeUser };
+};
+
+export const signup = async ({ username, password }) => {
+  const users = readUsers();
+  if (users.some((item) => item.username.toLowerCase() === username.toLowerCase())) {
+    throw { response: { data: "Username already exists." } };
+  }
+
+  const user = makeUser(username);
+  users.push({ ...user, password });
+  writeUsers(users);
+  return { data: user };
 };
