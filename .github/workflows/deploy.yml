@@ -1,32 +1,35 @@
-name: Deploy
+name: Build and verify
 
 on:
   push:
     branches:
       - master
-    paths-ignore:
-      - README.md
+  pull_request:
+    branches:
+      - master
 
 jobs:
-  lint:
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Install modules
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install root dependencies
         run: npm ci
-      - name: Run Prettier
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Check formatting
         run: npx prettier --check .
 
-  deploy:
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: akhileshns/heroku-deploy@v3.12.12
-        with:
-          heroku_api_key: ${{secrets.HEROKU_API_KEY}}
-          heroku_app_name: "discord-clone-ksuen"
-          heroku_email: "kingyiusuen@gmail.com"
-          healthcheck: "https://discord-clone-ksuen.herokuapp.com/health"
-          delay: 5
-          rollbackonhealthcheckfailed: true
+      - name: Build client
+        run: npm run build
+        working-directory: client
