@@ -1,13 +1,21 @@
-import axios from "axios";
+const CHANNELS = [
+  { id: 1, name: "general" },
+  { id: 2, name: "introduce-yourself" },
+  { id: 3, name: "welcome" },
+  { id: 4, name: "programming" },
+  { id: 5, name: "gaming" },
+];
 
-const api = axios.create({
-  baseURL: "/api/channels",
-});
+const messagesKey = (channelId) => `discord-my-messages-${channelId}`;
 
-export const getChannels = async () => {
-  return await api.get("/");
+const readMessages = (channelId) => {
+  try {
+    return JSON.parse(localStorage.getItem(messagesKey(channelId)) || "[]");
+  } catch {
+    return [];
+  }
 };
 
-export const getMessages = async (channelId) => {
-  return await api.get(`/${channelId}`);
-};
+export const getChannels = async () => ({ data: CHANNELS });
+
+export const getMessages = async (channelId) => ({ data: readMessages(channelId) });
