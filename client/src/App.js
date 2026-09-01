@@ -1,6 +1,6 @@
 import React from "react";
 
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { HashRouter, Route, Routes } from "react-router-dom";
 
 import Dashboard from "./components/dashboard/Dashboard";
 import DemoLoginPage from "./components/authForm/DemoLoginPage";
@@ -10,7 +10,7 @@ import { RequireAuth } from "./routes";
 
 const App = () => {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<DemoLoginPage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -24,7 +24,7 @@ const App = () => {
           }
         />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 };
 
