@@ -1,5 +1,3 @@
-import io from "socket.io-client";
-
 import {
   receiveNewMessage,
   receiveEditedMessage,
@@ -8,68 +6,94 @@ import {
 } from "../reducers/chatReducer";
 import { updateOnlineUsers } from "../reducers/memberListReducer";
 
-const socketMiddleware = () => {
-  return (storeAPI) => {
-    // This part is called when the Redux store is created
-    const socket = io("/", { autoConnect: false });
+const messagesKey = (channelId) => `discord-my-messages-${channelId}`;
+const channel = typeof window !== "undefined" && "BroadcastChannel" in window
+  ? new BroadcastChannel("discord-my")
+  : null;
 
-    socket.on("send-message", (message) => {
-      storeAPI.dispatch(receiveNewMessage(message));
-    });
+const saveMessages = (channelId, messages) => {
+  localStorage.setItem(messagesKey(channelId), JSON.stringify(messages));
+};
 
-    socket.on("edit-message", (message) => {
-      storeAPI.dispatch(receiveEditedMessage(message));
-    });
+const readMessages = (channelId) => {
+  try {
+    return JSON.parse(localStorage.getItem(messagesKey(channelId)) || "[]");
+  } catch {
+    return [];
+  }
+};
 
-    socket.on("delete-message", (message) => {
-      storeAPI.dispatch(receiveDeletedMessage(message));
-    });
-
-    socket.on("update-member-list", (user) => {
-      storeAPI.dispatch(updateOnlineUsers(user));
-    });
-
-    socket.on("typing", (user) => {
-      storeAPI.dispatch(updateTypingUser(user));
-    });
-
-    socket.on("stop-typing", (user) => {
-      storeAPI.dispatch(updateTypingUser(null));
-    });
-
-    // This part is called when an action is dispatched
-    return (next) => (action) => {
-      switch (action.type) {
-        case "channels/setActiveChannel":
-          socket.emit("set-active-channel", JSON.stringify(action.payload));
-          break;
-        case "chat/sendMessage":
-          socket.emit("send-message", action.payload);
-          break;
-        case "chat/editMessage":
-          socket.emit("edit-message", action.payload);
-          break;
-        case "chat/deleteMessage":
-          socket.emit("delete-message", action.payload);
-          break;
-        case "chat/typing":
-          socket.emit("typing", action.payload);
-          break;
-        case "chat/stopTyping":
-          socket.emit("stop-typing", action.payload);
-          break;
-        case "session/connectSocket":
-          socket.connect();
-          socket.emit("new-client", action.payload);
-          break;
-        case "session/logout":
-          socket.close();
-          break;
-        default:
-          break;
-      }
-      return next(action);
+const socketMiddleware = () => (storeAPI) => {
+  if (channel) {
+    channel.onmessage = ({ data }) => {
+      if (data.type === "message:add") storeAPI.dispatch(receiveNewMessage(data.message));
+      if (data.type === "message:edit") storeAPI.dispatch(receiveEditedMessage(data.message));
+      if (data.type === "message:delete") storeAPI.dispatch(receiveDeletedMessage(data.message));
+      if (data.type === "typing") storeAPI.dispatch(updateTypingUser(data.user));
+      if (data.type === "stopTyping") storeAPI.dispatch(updateTypingUser(null));
+      if (data.type === "online") storeAPI.dispatch(updateOnlineUsers(data.users));
     };
+  }
+
+  return (next) => (action) => {
+    const currentUser = storeAPI.getState().session.user;
+
+    switch (action.type) {
+      case "chat/sendMessage": {
+        const { user, channelId, content } = action.payload;
+        const message = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          createdAt: new Date().toISOString(),
+          content,
+          channelId,
+          user,
+        };
+        const messages = readMessages(channelId);
+        messages.push(message);
+        saveMessages(channelId, messages);
+        storeAPI.dispatch(receiveNewMessage(message));
+        channel?.postMessage({ type: "message:add", message });
+        break;
+      }
+      case "chat/editMessage": {
+        const { id, channelId, content, user } = action.payload;
+        const messages = readMessages(channelId).map((message) =>
+          message.id === id
+            ? { ...message, content, user, updatedAt: new Date().toISOString() }
+            : message
+        );
+        const message = messages.find((item) => item.id === id);
+        saveMessages(channelId, messages);
+        if (message) storeAPI.dispatch(receiveEditedMessage(message));
+        if (message) channel?.postMessage({ type: "message:edit", message });
+        break;
+      }
+      case "chat/deleteMessage": {
+        const { id, channelId } = action.payload;
+        saveMessages(channelId, readMessages(channelId).filter((message) => message.id !== id));
+        storeAPI.dispatch(receiveDeletedMessage({ id }));
+        channel?.postMessage({ type: "message:delete", message: { id } });
+        break;
+      }
+      case "chat/typing":
+        storeAPI.dispatch(updateTypingUser(action.payload));
+        channel?.postMessage({ type: "typing", user: action.payload });
+        break;
+      case "chat/stopTyping":
+        storeAPI.dispatch(updateTypingUser(null));
+        channel?.postMessage({ type: "stopTyping" });
+        break;
+      case "session/connectSocket":
+        if (currentUser) storeAPI.dispatch(updateOnlineUsers([currentUser]));
+        break;
+      case "session/logout":
+        storeAPI.dispatch(updateOnlineUsers([]));
+        break;
+      default:
+        break;
+    }
+
+    return next(action);
   };
 };
 
