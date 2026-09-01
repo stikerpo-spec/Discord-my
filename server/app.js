@@ -18,6 +18,11 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Deployment health check
+app.get("/health", (_request, response) => {
+  response.status(200).json({ status: "ok" });
+});
+
 // api routes
 app.use("/api/users", usersRouter);
 app.use("/api/channels", channelsRouter);
